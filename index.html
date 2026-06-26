@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Индекс дефицита топлива · регионы РФ</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0a0d13;--card:#141a25;--card2:#1b2330;--line:#26303f;--txt:#e7edf4;--mut:#8a97a8;
+--red:#ef4444;--orange:#f59e0b;--yellow:#eab308;--green:#22c55e;--blue:#3b82f6;--accent:#f59e0b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:22px 18px 70px}
+h1{font-size:24px;margin:0 0 4px}
+.sub{color:var(--mut);font-size:13px;margin:0 0 18px}
+.hyp{background:linear-gradient(135deg,#1b2433,#151c28);border:1px solid var(--line);border-left:3px solid var(--accent);
+border-radius:11px;padding:13px 15px;margin:0 0 20px;font-size:13.5px;color:#cfd8e3}
+.hyp b{color:var(--accent)}
+.kpis{display:flex;flex-wrap:wrap;gap:11px;margin:0 0 20px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px 15px;flex:1;min-width:150px}
+.kpi .v{font-size:22px;font-weight:800}.kpi .l{color:var(--mut);font-size:12px;margin-top:3px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:18px}
+.panel h2{font-size:16px;margin:0 0 3px}.panel .note{color:var(--mut);font-size:12.5px;margin:0 0 14px}
+.tabs{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 12px}
+.tab{background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:18px;padding:5px 12px;font-size:12.5px;cursor:pointer}
+.tab.on{background:var(--accent);color:#1a1200;border-color:var(--accent);font-weight:700}
+canvas{max-height:340px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--mut);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:-1px}
+.foot{color:var(--mut);font-size:12px;text-align:center;margin-top:24px}
+.foot a{color:var(--accent)}
+.warn{background:#1c1710;border:1px solid #3a2c12;border-left:3px solid var(--orange);border-radius:10px;
+padding:11px 14px;margin:16px 0 0;font-size:12.5px;color:#e9d6b3}
+.scroll{max-height:430px;overflow:auto}
+.badge{padding:2px 8px;border-radius:7px;font-weight:700;font-size:12px;color:#0a0d13}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⛽📉 Индекс дефицита топлива — регионы России</h1>
+  <p class="sub" id="updated">загрузка…</p>
+
+  <div class="hyp">
+    <b>Цель — не пробки, а дефицит топлива.</b> Главный маркер — <b>розничная цена бензина по регионам</b>:
+    резкий рост или аномально высокая цена = напряжение в поставках (так в сентябре-2025 встали Поволжье и Юг).
+    Пробки Яндекса — вторичный поведенческий слой (меньше топлива → меньше ездят). Дашборд копит
+    <b>многодневную динамику</b>, чтобы отделить тренд от шума.
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="panel">
+    <h2>📈 Динамика цены по региону <span style="color:var(--mut);font-weight:400">(копится день за днём)</span></h2>
+    <p class="note">Выбери регион — увидишь, как ползёт цена. Устойчивый рост = усиление дефицита.</p>
+    <div class="tabs" id="regionTabs"></div>
+    <canvas id="priceChart" height="105"></canvas>
+    <p class="note" id="priceNote"></p>
+  </div>
+
+  <div class="panel">
+    <h2>🔥 Карта напряжения — цена АИ-95 по регионам, сейчас</h2>
+    <p class="note">Сортировка по цене: вверху — где топливо дороже всего (максимальный стресс).</p>
+    <div class="scroll"><table id="priceTable"><thead>
+      <tr><th>Регион</th><th class="num">АИ-92</th><th class="num">АИ-95</th><th class="num">ДТ</th><th>статус</th></tr>
+    </thead><tbody></tbody></table></div>
+  </div>
+
+  <div class="panel">
+    <h2>🚗 Пробки — поведенческий слой</h2>
+    <p class="note">Балл загрузки 0–10 по крупным городам. Падение трафика подкрепляет сигнал дефицита.</p>
+    <div class="tabs" id="cityTabs"></div>
+    <canvas id="trafficChart" height="95"></canvas>
+  </div>
+
+  <div class="warn" id="warn"></div>
+
+  <p class="foot">
+    Цены: <a href="https://benzup.ru/index-region" target="_blank">benzup / ОМТ-Консалт</a> (ежедневно, 88 регионов) ·
+    Пробки: <a href="https://yandex.ru/maps/probki" target="_blank">Яндекс</a> ·
+    Сбор и визуализация: автономный агент Logos · AT Systems
+  </p>
+</div>
+
+<script>
+const PALETTE=['#f59e0b','#3b82f6','#22c55e','#ef4444','#a855f7','#14b8a6','#ec4899','#eab308','#06b6d4','#f97316','#8b5cf6','#10b981','#fb7185','#60a5fa','#34d399','#fbbf24'];
+let DB=null, activeRegion=null, activeCity=null, priceCh=null, trafCh=null;
+
+function priceColor(p){ if(p==null)return '#444'; if(p>=95)return '#ef4444'; if(p>=82)return '#f59e0b'; if(p>=75)return '#eab308'; return '#22c55e'; }
+
+async function load(){
+  const r=await fetch('data.json?_='+Date.now());
+  DB=await r.json();
+  render();
+}
+
+function latestPrices(){ return DB.prices_series[DB.prices_series.length-1]; }
+
+function render(){
+  const lp=latestPrices();
+  document.getElementById('updated').textContent=
+    `Обновлено: ${DB.meta.updated_msk} МСК · цены на ${lp.src_date} · ценовых срезов: ${DB.prices_series.length} · замеров трафика: ${DB.traffic_series.length}`;
+
+  const priced=lp.regions.filter(r=>r.ai95!=null);
+  const avg=priced.reduce((a,b)=>a+b.ai95,0)/priced.length;
+  const sorted=[...priced].sort((a,b)=>b.ai95-a.ai95);
+  const top=sorted[0], cheap=sorted[sorted.length-1];
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi"><div class="v">${avg.toFixed(1)}₽</div><div class="l">средняя АИ-95 по ${priced.length} регионам</div></div>
+    <div class="kpi"><div class="v" style="color:${priceColor(top.ai95)}">${top.ai95}₽</div><div class="l">пик: ${top.region}</div></div>
+    <div class="kpi"><div class="v" style="color:${priceColor(cheap.ai95)}">${cheap.ai95}₽</div><div class="l">минимум: ${cheap.region}</div></div>
+    <div class="kpi"><div class="v">${(top.ai95-cheap.ai95).toFixed(0)}₽</div><div class="l">разброс по стране</div></div>`;
+
+  // price table
+  const tb=document.querySelector('#priceTable tbody'); tb.innerHTML='';
+  for(const r of sorted){
+    const status = r.ai95>=95?'🔴 острый':r.ai95>=82?'🟠 высокий':r.ai95>=75?'🟡 повышенный':'🟢 норма';
+    tb.insertAdjacentHTML('beforeend',
+      `<tr><td><span class="dot" style="background:${priceColor(r.ai95)}"></span>${r.region}</td>
+       <td class="num">${r.ai92??'—'}</td><td class="num"><b>${r.ai95??'—'}</b></td>
+       <td class="num">${r.dt??'—'}</td><td>${status}</td></tr>`);
+  }
+
+  // region tabs (top-12 most expensive by default + selectable)
+  if(!activeRegion) activeRegion=sorted[0].region;
+  const rt=document.getElementById('regionTabs'); rt.innerHTML='';
+  sorted.slice(0,14).forEach(r=>{
+    const b=document.createElement('div');b.className='tab'+(r.region===activeRegion?' on':'');b.textContent=r.region;
+    b.onclick=()=>{activeRegion=r.region;drawPrice();[...rt.children].forEach(x=>x.classList.toggle('on',x.textContent===activeRegion));};
+    rt.appendChild(b);
+  });
+  drawPrice();
+
+  // traffic tabs
+  if(!activeCity) activeCity=DB.meta.traffic_cities[0];
+  const ct=document.getElementById('cityTabs'); ct.innerHTML='';
+  DB.meta.traffic_cities.forEach(c=>{
+    const b=document.createElement('div');b.className='tab'+(c===activeCity?' on':'');b.textContent=c;
+    b.onclick=()=>{activeCity=c;drawTraffic();[...ct.children].forEach(x=>x.classList.toggle('on',x.textContent===activeCity));};
+    ct.appendChild(b);
+  });
+  drawTraffic();
+
+  const w=document.getElementById('warn');
+  if(DB.prices_series.length<3){
+    w.style.display='block';
+    w.innerHTML=`⏳ <b>История цен только начала копиться.</b> Цены обновляются раз в сутки — динамика «рост цены = усиление дефицита» станет видна за несколько дней. Сейчас ценовых срезов: <b>${DB.prices_series.length}</b>. Но <b>срез "сейчас" уже информативен</b>: смотри карту напряжения — Крым, ДНР, Дагестан уже в красной зоне.`;
+  } else w.style.display='none';
+}
+
+function drawPrice(){
+  const labels=DB.prices_series.map(s=>s.src_date);
+  const series=DB.prices_series.map(s=>{const r=s.regions.find(x=>x.region===activeRegion);return r?r.ai95:null;});
+  document.getElementById('priceNote').textContent =
+    DB.prices_series.length<2 ? `${activeRegion}: один срез. Линия наполнится за дни — следи за наклоном.`
+    : `${activeRegion}: ${DB.prices_series.length} дней. Наклон вверх = дефицит усиливается.`;
+  if(priceCh)priceCh.destroy();
+  priceCh=new Chart(document.getElementById('priceChart'),{type:'line',
+    data:{labels,datasets:[{label:activeRegion+' · АИ-95 ₽',data:series,borderColor:'#f59e0b',
+      backgroundColor:'rgba(245,158,11,.14)',fill:true,tension:.3,pointRadius:series.length>40?0:3,borderWidth:2.5}]},
+    options:{plugins:{legend:{labels:{color:'#e7edf4'}}},scales:{
+      y:{grid:{color:'#1e2735'},ticks:{color:'#8a97a8'}},x:{grid:{display:false},ticks:{color:'#8a97a8',maxTicksLimit:10}}}}});
+}
+
+function drawTraffic(){
+  const labels=DB.traffic_series.map(s=>s.msk);
+  const series=DB.traffic_series.map(s=>{const c=s.cities[activeCity];return c?c.level:null;});
+  if(trafCh)trafCh.destroy();
+  trafCh=new Chart(document.getElementById('trafficChart'),{type:'line',
+    data:{labels,datasets:[{label:activeCity+' · балл пробок',data:series,borderColor:'#3b82f6',
+      backgroundColor:'rgba(59,130,246,.14)',fill:true,tension:.3,pointRadius:series.length>50?0:2,borderWidth:2,spanGaps:true}]},
+    options:{plugins:{legend:{labels:{color:'#e7edf4'}}},scales:{
+      y:{min:0,max:10,grid:{color:'#1e2735'},ticks:{color:'#8a97a8'}},x:{grid:{display:false},ticks:{color:'#8a97a8',maxTicksLimit:10}}}}});
+}
+
+load();
+setInterval(load, 5*60*1000);
+</script>
+</body>
+</html>
